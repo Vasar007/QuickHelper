@@ -6,7 +6,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-
 using QuickHelper.Hash;
 
 namespace QuickHelper
@@ -20,19 +19,24 @@ namespace QuickHelper
         #region Private Fields
 
         /// <summary>
+        /// Default movement size of main window.
+        /// </summary>
+        private const int DEFAULT_MOVEMENT_SIZE = 20;
+
+        /// <summary>
+        /// Movement speed of main windows.
+        /// </summary>
+        private const int MOVEMENT_SPEED = 10;
+
+        /// <summary>
+        /// Number of buffer-buttons in app.
+        /// </summary>
+        private const int BUTTONS_NUMBER = 9;
+
+        /// <summary>
         /// Timer for animating form movement.
         /// </summary>
         private readonly DispatcherTimer _dispatcherTimer;
-
-        /// <summary>
-        /// Default movement size of main window.
-        /// </summary>
-        private const int DEFAULT_MOVEMENT_SIZE = 30;
-
-        /// <summary>
-        /// Movement speed of main windwos
-        /// </summary>
-        private const int MOVEMENT_SPEED = 5;
 
         /// <summary>
         /// Dynamic movement size to check every time on mouse enter/leave or at the end of 
@@ -57,46 +61,55 @@ namespace QuickHelper
         /// <summary>
         /// Column counter for dynamically creating buttons.
         /// </summary>
-        private int ColumnNumber { set; get; }
+        private int ColumnNumber { get; set; }
 
         /// <summary>
         /// Row counter for dynamically creating buttons.
         /// </summary>
-        private int RowNumber { set; get; }
+        private int RowNumber { get; set; }
 
         /// <summary>
         /// Button counter for dynamically creating buttons. Using in button names and tags.
         /// </summary>
-        private int ButtonCounter { set; get; }
+        private int ButtonCounter { get; set; }
 
         /// <summary>
         /// Boolean flag for handling clipboard changed event after button click.
         /// </summary>
-        private bool ButtonClicked { set; get; }
+        private bool ButtonClicked { get; set; }
 
         /// <summary>
         /// Additional boolean flag for handling clipboard changed event after button click.
         /// </summary>
-        private bool ButtonClickedTwice { set; get; }
+        private bool ButtonClickedTwice { get; set; }
 
         /// <summary>
         /// Additional helper for creating new buttons.
         /// </summary>
-        private bool[] FilledPositions { set; get; }
+        private bool[] FilledPositions { get; }
 
         /// <summary>
         /// Temporary buffer for defending from keeping key (Ctr + C).
         /// </summary>
-        private string TextBuffer { set; get; }
+        private string TextBuffer { get; set; }
 
-        private string ImageBuffer { set; get; }
+        /// <summary>
+        /// Temporary MD5 hash image  buffer to prevent extra image copying.
+        /// </summary>
+        private string ImageTextHashBuffer { get; set; }
+
+        /// <summary>
+        /// Temporary image buffer to prevent extra clipboard calls.
+        /// </summary>
+        private BitmapSource ImageBuffer { get; set; }
 
         /// <summary>
         /// Boolean flag to track window movement.
         /// </summary>
-        private bool HasStartingPosition { set; get; }
+        private bool HasStartingPosition { get; set; }
 
         #endregion
+
 
         #region Constructor
 
@@ -110,23 +123,16 @@ namespace QuickHelper
 
             // Initialize private fields.
             _dispatcherTimer = new DispatcherTimer();
-            _movementSize    = DEFAULT_MOVEMENT_SIZE;
-            _difference      = default(int);
-            _movementCounter = 0;
+            _movementSize = DEFAULT_MOVEMENT_SIZE;
 
             // DispatcherTimer setup.
-            _dispatcherTimer.Tick    += DispatcherTimer_Tick;
+            _dispatcherTimer.Tick += DispatcherTimer_Tick;
             _dispatcherTimer.Interval = new TimeSpan(0, 0, 0, 0, 1);
             _dispatcherTimer.Start();
 
             // Initialize private properties.
-            ColumnNumber        = 0;
-            RowNumber           = 1;
-            ButtonCounter       = 0;
-            ButtonClicked       = false;
-            FilledPositions     = new bool[9];
-            TextBuffer          = default(string);
-            ImageBuffer         = default(string);
+            RowNumber = 1;
+            FilledPositions = new bool[BUTTONS_NUMBER];
             HasStartingPosition = true;
         }
 
@@ -156,7 +162,7 @@ namespace QuickHelper
         {
             base.OnSourceInitialized(e);
 
-            // Initialize the clipboard now that we have a window soruce to use.
+            // Initialize the clipboard now that we have a window source to use.
             var windowClipboardManager = new ClipboardManager(this);
             windowClipboardManager.ClipboardChanged += ClipboardChanged;
         }
@@ -184,9 +190,9 @@ namespace QuickHelper
                 return;
             }
 
-            if (ToogleButton.IsChecked == false)
+            if (ToggleButton.IsChecked == false)
             {
-                // Change background color for visability because program isn't tracking clipboard.
+                // Change background color for visibility because program isn't tracking clipboard.
                 foreach (var gridButton in MainGrid.Children.OfType<Button>())
                 {
                     gridButton.Background = Brushes.LightGray;
@@ -199,14 +205,23 @@ namespace QuickHelper
             if (Clipboard.ContainsText())
             {
                 // Get test from clipboard.
-                var newText = Clipboard.GetText();
+                string newText;
+                try
+                {
+                    newText = Clipboard.GetText();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    return;
+                }
+
 
                 // Check if user copied exactly same text like before.
-                if (TextBuffer == newText)
-                    return;
+                if (TextBuffer == newText) return;
 
                 // Set buffer to check.
-                TextBuffer = Clipboard.GetText();
+                TextBuffer = newText;
 
                 var dataText = new DataFormat("UnicodeText", 0);
                 CreateNewButton(dataText);
@@ -216,15 +231,24 @@ namespace QuickHelper
             if (Clipboard.ContainsImage())
             {
                 // Get image from clipboard and transfer it into bytes.
-                var buffer   = ImageHash.SaveImage(Clipboard.GetImage());
+                try
+                {
+                    ImageBuffer = Clipboard.GetImage();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    return;
+                }
+
+                var buffer = ImageHash.SaveImage(ImageBuffer);
                 var newImage = ImageHash.GetMD5Hash(buffer);
 
                 // Check if user copied exactly same text like before.
-                if (ImageBuffer == newImage)
-                    return;
+                if (ImageTextHashBuffer == newImage) return;
 
                 // Set buffer to check.
-                ImageBuffer = newImage;
+                ImageTextHashBuffer = newImage;
 
                 var dataImage = new DataFormat("Bitmap", 1);
                 CreateNewButton(dataImage);
@@ -261,12 +285,14 @@ namespace QuickHelper
         private void Button_Click(object sender, RoutedEventArgs e)
         {
            // Cast object sender to button.
-            var button = (Button)sender;
+            var button = (Button) sender;
 
             // Remember that we clicked on button.
             ButtonClicked = true;
             if (!(button.Tag is 0))
+            {
                 ButtonClickedTwice = true;
+            }
 
             // Send this button context to clipboard.
             try
@@ -280,7 +306,7 @@ namespace QuickHelper
 
                     // If user copied image in clipboard.
                     case 1:
-                        Clipboard.SetImage((BitmapSource)button.DataContext);
+                        Clipboard.SetImage((BitmapSource) button.DataContext);
                         break;
                     
                     default:
@@ -289,7 +315,7 @@ namespace QuickHelper
 
                 }
 
-                // Change background color for visability what program have in Clipboard.
+                // Change background color for visibility what program have in Clipboard.
                 foreach (var gridButton in MainGrid.Children.OfType<Button>())
                 {
                     gridButton.Background = Brushes.LightGray;
@@ -310,18 +336,19 @@ namespace QuickHelper
         private void RightMouse_Click(object sender, RoutedEventArgs e)
         {
             // Cast object sender to button.
-            var button = (Button)sender;
+            var button = (Button) sender;
 
-            // Toogle flag in helper array.
+            // Toggle flag in helper array.
             var index = Grid.GetColumn(button) + (Grid.GetRow(button) - 1) * 3;
             FilledPositions[index] = false;
 
-            // Delete button from form.
+            // Delete button from form and reset buffer.
             MainGrid.Children.Remove(button);
+            TextBuffer = string.Empty;
 
             // Clear memory from handled resources.
-            //GC.GetTotalMemory(true);
             GC.Collect();
+            //GC.GetTotalMemory(true);
         }
 
         #endregion
@@ -337,24 +364,22 @@ namespace QuickHelper
             // Check if grid have free place after deleting button.
             for (var i = 0; i < FilledPositions.Length; ++i)
             {
-                if (FilledPositions[i])
-                    continue;
+                if (FilledPositions[i]) continue;
 
                 ColumnNumber = i % 3;
-                RowNumber    = i / 3 + 1;
+                RowNumber = i / 3 + 1;
                 break;
             }
 
             // If grid filled, return.
-            if (RowNumber > 3)
-                return;
+            if (RowNumber > 3) return;
 
             // Create button with handled text.
             var button = new Button
             {
-                Name    = "Button" + ButtonCounter,
-                Cursor  = Cursors.Hand,
-                Tag     = dataFormat.Id,
+                Name = "Button" + ButtonCounter,
+                Cursor = Cursors.Hand,
+                Tag = dataFormat.Id,
                 Opacity = 0.75
             };
 
@@ -363,16 +388,16 @@ namespace QuickHelper
             {
                 // Create button with handled text.
                 case 0:
-                    button.DataContext = Clipboard.GetText();
-                    button.Content     = Clipboard.GetText().Trim(' ');
+                    button.DataContext = TextBuffer;
+                    button.Content = TextBuffer.Trim(' ');
                     break;
                 
                 // Create button with handled image.
                 case 1:
-                    button.DataContext = Clipboard.GetImage();
-                    button.Content     = new Image
+                    button.DataContext = ImageBuffer;
+                    button.Content = new Image
                     {
-                        Source            = Clipboard.GetImage(),
+                        Source = ImageBuffer,
                         VerticalAlignment = VerticalAlignment.Center
                     };
                     break;
@@ -380,14 +405,15 @@ namespace QuickHelper
                 // Create button with empty stuff.
                 default:
                     button.DataContext = string.Empty;
+                    Console.WriteLine(@"Unsupported data format.");
                     break;
             }
 
             // Add click event.
-            button.Click                += Button_Click;
+            button.Click += Button_Click;
             button.MouseRightButtonDown += RightMouse_Click;
 
-            // Change background color for visability what program have in Clipboard.
+            // Change background color for visibility what program have in Clipboard.
             foreach (var gridButton in MainGrid.Children.OfType<Button>())
             {
                 gridButton.Background = Brushes.LightGray;
@@ -401,8 +427,8 @@ namespace QuickHelper
             // Add button to grid.
             MainGrid.Children.Add(button);
 
-            // Toogle flag in helper array.
-            var index              = ColumnNumber + (RowNumber - 1) * 3;
+            // Toggle flag in helper array.
+            var index = ColumnNumber + (RowNumber - 1) * 3;
             FilledPositions[index] = true;
 
             // Update grid's variables.
@@ -423,6 +449,8 @@ namespace QuickHelper
         /// <param name="e">Click event.</param>
         private void Window_OnMouseMovement(object sender, MouseEventArgs e)
         {
+            if (SwitchButton.IsChecked == true) return;
+
             // If window is not moving, start moving timer.
             if (!_dispatcherTimer.IsEnabled)
             {
@@ -434,11 +462,11 @@ namespace QuickHelper
                 _dispatcherTimer.Stop();
 
                 // Update all movement variables.
-                _movementSize        = _movementSize == DEFAULT_MOVEMENT_SIZE
-                                         ? _movementCounter
-                                         : _movementCounter + _difference;
-                _difference          = DEFAULT_MOVEMENT_SIZE - _movementSize;
-                _movementCounter     = 0;
+                _movementSize = _movementSize == DEFAULT_MOVEMENT_SIZE
+                                  ? _movementCounter
+                                  : _movementCounter + _difference;
+                _difference = DEFAULT_MOVEMENT_SIZE - _movementSize;
+                _movementCounter = 0;
                 HasStartingPosition ^= true;
 
                 // And start moving timer again.
@@ -451,34 +479,28 @@ namespace QuickHelper
         #region Timer Method
 
         /// <summary>
-        /// Animate form movement and change SwitchButton content.
+        /// Animate form movement.
         /// </summary>
         /// <param name="sender">Animation timer.</param>
         /// <param name="e">Basic <see cref="System.EventArgs"/> class.</param>
         private void DispatcherTimer_Tick(object sender, EventArgs e)
         {
-            // Change window position dependent on whether the window in the starting position.
-            WindowForm.Left += HasStartingPosition ? MOVEMENT_SPEED : -MOVEMENT_SPEED;
-            ++_movementCounter;
-
-            // If window riched the end position.
+            // If window riches the end position.
             if (_movementCounter == _movementSize)
             {
                 // Stop moving timer.
                 _dispatcherTimer.Stop();
 
                 // Reset all movement variables.
-                _movementCounter     = 0;
-                _difference          = 0;
-                _movementSize        = DEFAULT_MOVEMENT_SIZE;
+                _movementCounter = 0;
+                _difference = 0;
+                _movementSize = DEFAULT_MOVEMENT_SIZE;
                 HasStartingPosition ^= true;
             }
 
-
-            // If timer has stopped, change text in upper-left corner.
-            if (!_dispatcherTimer.IsEnabled)
-                SwitchText.Text = HasStartingPosition ? ">>>" : "<<<";
-
+            // Change window position dependent on whether the window in the starting position.
+            WindowForm.Left += HasStartingPosition ? MOVEMENT_SPEED : -MOVEMENT_SPEED;
+            ++_movementCounter;
 
             // Forcing the CommandManager to raise the RequerySuggested event.
             CommandManager.InvalidateRequerySuggested();

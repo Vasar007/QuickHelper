@@ -34,14 +34,16 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <TextBlock x:Name="SwitchText" Text=">>>" VerticalAlignment="Center" 
-                HorizontalAlignment="Center" Grid.Column="0" Grid.Row="0" Tag="SWITCH"
-                Opacity="0.75"/>
-        <CheckBox x:Name="ToogleButton" Content="Track" Cursor="Hand" IsChecked="True"
-                Grid.Column="1" Grid.Row="0" Tag="TRACK" Margin="25 5 25 0" Background="LightGray"
-                Opacity="0.75"/>
+        <CheckBox x:Name="ToggleButton" Content="Track" Cursor="Hand" IsChecked="True"
+                  VerticalAlignment="Center" HorizontalAlignment="Center"
+                  Grid.Column="0" Grid.Row="0" Tag="TRACK"
+                  Background="LightGray" Opacity="0.75"/>
+        <CheckBox x:Name="SwitchButton" Content="Fixed" Cursor="Hand" IsChecked="False"
+                  VerticalAlignment="Center" HorizontalAlignment="Center"
+                  Grid.Column="1" Grid.Row="0" Tag="SWITCH"
+                  Background="LightGray" Opacity="0.75"/>
         <Button Content="X" Click="CloseButton_Click" Cursor="Hand"
-                Grid.Column="2" Grid.Row="0" Tag="CLOSE" Background="LightGray"
-                Opacity="0.75"/>
+                Grid.Column="2" Grid.Row="0" Tag="CLOSE"
+                Background="LightGray" Opacity="0.75"/>
     </Grid>
 </Window>

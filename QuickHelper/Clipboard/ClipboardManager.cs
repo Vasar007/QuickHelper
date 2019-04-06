@@ -9,9 +9,10 @@ namespace QuickHelper
     /// </summary>
     public class ClipboardManager
     {
+        private static readonly IntPtr WndProcSuccess = IntPtr.Zero;
+
         public event EventHandler ClipboardChanged;
 
-        private static readonly IntPtr WndProcSuccess = IntPtr.Zero;
 
         /// <summary>
         /// A basic constructor.
